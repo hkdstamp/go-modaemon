@@ -7,12 +7,16 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/mobingilabs/go-modaemon/config"
 	"github.com/mobingilabs/go-modaemon/server_config"
+	"github.com/mobingilabs/go-modaemon/util"
 )
+
+var logregion = "ap-northeast-1"
 
 type client struct {
 	client    *http.Client
@@ -100,6 +104,42 @@ func (c *client) GetStsToken() (*StsToken, error) {
 	return stsToken, nil
 }
 
+func (c *client) WriteTempToken(token *StsToken) error {
+	region := logregion
+
+	creadsTemplate := `[tempcreds]
+aws_access_key_id=%s
+aws_secret_access_key=%s
+aws_session_token=%s
+region=%s
+`
+
+	creadsForlogs := `[plugins]
+cwlogs = cwlogs
+[default]
+aws_access_key_id=%s
+aws_secret_access_key=%s
+aws_session_token=%s
+region=%s
+`
+
+	if !util.FileExists("/root/.aws") {
+		os.Mkdir("/root/.aws", 0700)
+	}
+
+	tempcreadsContent := fmt.Sprintf(creadsTemplate, token.AccessKeyID, token.SecretAccessKey, token.SessionToken, region)
+	logscreadsContent := fmt.Sprintf(creadsForlogs, token.AccessKeyID, token.SecretAccessKey, token.SessionToken, region)
+	err := ioutil.WriteFile("/root/.aws/credentials", []byte(tempcreadsContent), 0600)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile("/root/.aws/awslogs_creds.conf", []byte(logscreadsContent), 0600)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *client) SendInstanceStatus(serverID, status string) error {
 	values := url.Values{}
 	values.Set("instance_id", serverID)
@@ -107,6 +147,16 @@ func (c *client) SendInstanceStatus(serverID, status string) error {
 	values.Set("status", status)
 
 	_, err := c.post("/v2/alm/instance/status", values)
+	return err
+}
+
+func (c *client) SendSpotShutdownEvent(serverID string) error {
+	values := url.Values{}
+	values.Set("user_id", c.config.UserID)
+	values.Set("stack_id", c.config.StackID)
+	values.Set("instance_id", serverID)
+
+	_, err := c.post("/v2/event/spot/shutdown", values)
 	return err
 }
 

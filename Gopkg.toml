@@ -1,0 +1,20 @@
+
+[[dependencies]]
+  name = "github.com/koron/go-dproxy"
+  version = "v1.1"
+
+[[dependencies]]
+  name = "github.com/BurntSushi/toml"
+  version = "v0.3.0"
+
+[[dependencies]]
+  branch = "master"
+  name = "github.com/aws/aws-sdk-go/aws/..."
+
+[[dependencies]]
+  version = "v17.04.0-ce"
+  name = "github.com/docker/docker/..."
+
+[[dependencies]]
+  branch = "master"
+  name = "github.com/tcnksm/go-latest"

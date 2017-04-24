@@ -2,43 +2,40 @@
 # vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-  config.vm.box = 'ubuntu/trusty64'
+  config.vm.define "default" do |c|
+    c.vm.box = 'ubuntu/trusty64'
+    c.vm.provision :shell, path: File.expand_path('../vagrant/prov/ub14.sh', __FILE__)
+    c.vm.synced_folder '.', '/home/vagrant/src/github.com/mobingilabs/go-modaemon'
+  end
 
-  config.vm.provision :shell, inline: <<-EOF
-    echo Installing golang ...
-    archive=go1.8.linux-amd64.tar.gz
-    if [ ! -f $archive ]; then
-      wget -q https://storage.googleapis.com/golang/$archive
-    fi
+  # for plugin development
+  config.vm.define "amzn" do |c|
+    c.vm.box = 'dummy'
+    c.ssh.pty = true
 
-    if [ ! -d /usr/local/go ]; then
-      tar -C /usr/local -xzf $archive
-    fi
+    c.vm.provider :aws do |aws, override|
+      aws.aws_profile = ENV['AWS_PROFILE']
+      aws.keypair_name = ENV['AWS_KEYPAIR_NAME']
+      override.ssh.username = 'ec2-user'
+      override.ssh.private_key_path = ENV['AWS_KEYPAIR_PATH']
+      # Amazon Linux AMI 2017.03.0.20170401 x86_64 HVM
+      aws.region = 'ap-northeast-1'
+      aws.region_config 'ap-northeast-1', ami: 'ami-859bbfe2'
+      ## << Ref: https://github.com/mitchellh/vagrant-aws/issues/473 aws.region is not loaded from Vagrantfile
 
-    if ! grep GOPATH ~vagrant/.bashrc; then
-      echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/bin' >> ~vagrant/.bashrc
-      echo 'export GOPATH=$HOME' >> ~vagrant/.bashrc
-    fi
+      aws.user_data = "#!/bin/bash\nsed -i -e 's/^Defaults.*requiretty/# Defaults requiretty/g' /etc/sudoers"
 
-    if [ ! -d ~vagrant/src ]; then
-      mkdir ~vagrant/src
-      chown vagrant:vagrant ~vagrant/src
-    fi
+      aws.instance_type = 't2.medium'
+      aws.subnet_id = ENV['AWS_SUBNET_ID']
+      aws.associate_public_ip = true
+      aws.security_groups = ENV['AWS_SGS'].split(",")
+      aws.block_device_mapping = [{ 'DeviceName' => '/dev/xvda', 'Ebs.VolumeSize' => 20 }]
+      aws.tags = {
+        'Name' => "go-modaemon-dev (Developping by #{ENV['USER']})"
+      }
+    end
 
-    echo Installing pkgconf, git and cmake ...
-    apt-get update
-    apt-get install -y pkgconf git cmake
-
-    mkdir -p ~vagrant/src/github.com/mobingilabs/go-modaemon
-    chown -R vagrant:vagrant ~vagrant/src
-
-    apt-get install -y apt-transport-https ca-certificates
-    apt-get install -y linux-image-extra-$(uname -r) linux-image-extra-virtual
-    apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
-    echo deb https://apt.dockerproject.org/repo ubuntu-trusty main > /etc/apt/sources.list.d/docker.list
-    apt-get update
-    apt-get install -y docker-engine --force-yes
-  EOF
-
-   config.vm.synced_folder '.', '/home/vagrant/src/github.com/mobingilabs/go-modaemon'
+    c.vm.provision :shell, path: File.expand_path('../vagrant/prov/amzn.sh', __FILE__)
+    c.vm.synced_folder '.', '/home/ec2-user/src/github.com/mobingilabs/go-modaemon'
+  end
 end
